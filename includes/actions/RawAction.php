@@ -33,6 +33,7 @@ use MediaWiki\MainConfigNames;
 use MediaWiki\Parser\Parser;
 use MediaWiki\Permissions\PermissionManager;
 use MediaWiki\Permissions\RestrictionStore;
+use MediaWiki\ResourceLoader\ResourceLoader;
 use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Session\SessionManager;
@@ -216,6 +217,27 @@ class RawAction extends FormlessAction {
 		return null;
 	}
 
+	private function minifyContent( string &$text, Content $content ) {
+		$request = $this->getRequest();
+		if ( !$request->getBool( 'minify' ) ) {
+			return false;
+		}
+
+		if ( $content instanceof JavaScriptContent ) {
+			$text = ResourceLoader::filter( 'minify-js', $text );
+		} else if ( $content instanceof CssContent ) {
+			$text = ResourceLoader::filter( 'minify-css', $text );
+		} else if ( $content instanceof JsonContent ) {
+			$text = FormatJson::encode(
+				FormatJson::parse( $text )->getValue(),
+				false,
+				FormatJson::UTF8_OK
+			);
+		}
+
+		return true;
+	}
+
 	/**
 	 * Get the text that should be returned, or false if the page or revision
 	 * was not found.
@@ -266,6 +288,9 @@ class RawAction extends FormlessAction {
 				if ( $content !== null && $content !== false ) {
 					// section found (and section supported, e.g. not for JS, JSON, and CSS)
 					$text = $content->getText();
+					if ( $text && $this->minifyContent( $text, $content ) ) {
+						return $text;
+					}
 				}
 			}
 		}
